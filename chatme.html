@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <title>AI数字生命</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    /* CSS样式 */
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto;background:#f1f1f1}
+    .app-container {display: flex;height: 100%;}
+    #sidebar {width: 280px;background: #2c3e50;color: white;padding: 20px 0;overflow-y: auto;flex-shrink: 0;transition: all 0.3s ease;}
+    #sidebar.collapsed {width: 0;padding: 0;overflow: hidden;}
+    .sidebar-header {padding: 0 20px 20px;border-bottom: 1px solid #34495e;margin-bottom: 20px;display: flex;justify-content: space-between;align-items: center;}
+    .sidebar-header h1 {margin: 0;font-size: 20px;font-weight: 600;}
+    .sidebar-toggle {background: none;border: none;color: white;cursor: pointer;font-size: 18px;padding: 5px;border-radius: 4px;transition: background 0.2s;}
+    .sidebar-toggle:hover {background: rgba(255,255,255,0.1);}
+    .character-list {padding: 0 10px;}
+    .character-item {padding: 15px;margin: 8px 0;border-radius: 10px;cursor: pointer;transition: all 0.3s ease;border: 2px solid transparent;}
+    .character-item:hover {background: #34495e;}
+    .character-item.active {background: #3498db;border-color: #2980b9;}
+    .character-name {font-weight: 600;margin-bottom: 5px;}
+    .character-desc {font-size: 12px;opacity: 0.8;line-height: 1.4;}
+    #main-content {flex: 1;display: flex;flex-direction: column;transition: all 0.3s ease;}
+    #main-content.expanded {margin-left: 0;}
+    #chat-header {background: white;padding: 15px 20px;border-bottom: 1px solid #ddd;box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
+    .current-character {display: flex;align-items: center;gap: 10px;}
+    .character-avatar {width: 40px;height: 40px;border-radius: 50%;background: #3498db;display: flex;align-items: center;justify-content: center;font-weight: bold;color: white;}
+    .character-info h2 {margin: 0;font-size: 18px;}
+    .character-info .character-tag {font-size: 12px;color: #666;margin-top: 2px;}
+    #chat{height:100%;display:flex;flex-direction:column}
+    #messages{flex:1;overflow-y:auto;padding:10px 15px 80px}
+    .msg{display:flex;margin:8px 0;align-items:flex-end}
+    .msg.me{flex-direction:row-reverse}
+    .bubble{max-width:65%;padding:10px 14px;border-radius:16px;font-size:16px;line-height:1.45;word-break:break-word}
+    .msg.ai .bubble{background:#fff;color:#000;cursor:pointer}
+    .msg.me .bubble{background:#95ec69;color:#000;cursor:pointer}
+    .voice-time{font-size:12px;color:#666;margin-left:6px}
+    .msg.me .voice-time{color:#555}
+    #bottom{position:fixed;bottom:0;right:0;left:280px;background:#fff;border-top:1px solid #ddd;padding:8px 12px;display:flex;align-items:center;gap:8px;transition: all 0.3s ease;}
+    #bottom.expanded {left: 0;}
+    #txt{flex:1;padding:10px 14px;font-size:16px;border:1px solid #ccc;border-radius:20px}
+    #send,#mic{width:44px;height:44px;border:none;border-radius:50%;font-size:20px;cursor:pointer;color:#fff}
+    #send{background:#007bff}
+    #mic{background:#28a745}
+    #mic.rec{background:#dc3545;animation:pulse 1s infinite}
+    .recording-indicator{display:none;color:#dc3545;font-size:14px;margin-left:8px}
+    .recording-indicator.show{display:inline}
+    .processing{opacity:.7;font-style:italic}
+    .playing .bubble{box-shadow:0 0 0 2px #007bff}
+    
+    /* AI声音生成加载圈圈 */
+    .tts-loading {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-radius: 16px;
+      font-size: 14px;
+      color: #666;
+      margin-top: 8px;
+    }
+    
+    .loading-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #e9ecef;
+      border-top: 2px solid #007bff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    @media (max-width: 768px) {
+      .app-container {flex-direction: column;}
+      #sidebar {width: 100%;height: auto;max-height: 200px;}
+      #sidebar.collapsed {width: 100%;height: 60px;padding: 10px 0;}
+      #sidebar.collapsed .character-list {display: none;}
+      #bottom {left: 0;}
+      #bottom.expanded {left: 0;}
+    }
+  </style>
+</head>
+<body>
+<div class="app-container">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h1>AI数字人</h1>
+      <div style="display: flex; align-items: center;">
+        <div style="font-size: 12px; opacity: 0.8; margin-right: 10px;">选择对话对象</div>
+        <button class="sidebar-toggle" id="sidebar-toggle" title="收起/展开边栏">◀</button>
+      </div>
+    </div>
+    <div class="character-list">
+      <div class="character-item active" data-character="yujiale">
+        <div class="character-name">xxx</div>
+        <div class="character-desc">18岁软件工程学生，技术爱好者，性格直接务实</div>
+      </div>
+      <div class="character-item" data-character="hujianbo">
+        <div class="character-name">胡先生</div>
+        <div class="character-desc">关注组织发展、专业发展与社会走向的思考者</div>
+      </div>
+      <div class="character-item" data-character="zhangtongxue">
+        <div class="character-name">张同学</div>
+        <div class="character-desc">多愁善感，心思细腻</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main-content">
+    <div id="chat-header">
+      <div class="current-character">
+        <div class="character-avatar" id="current-avatar">俞</div>
+        <div class="character-info">
+          <h2 id="current-name">xxx</h2>
+          <div class="character-tag" id="current-desc">18岁软件工程学生，技术爱好者</div>
+        </div>
+      </div>
+    </div>
+    <div id="chat">
+      <div id="messages"></div>
+    </div>
+  </div>
+</div>
+
+<div id="bottom">
+  <input id="txt" type="text" placeholder="说点什么…">
+  <button id="mic" title="语音输入">🎤</button>
+  <span id="recordingIndicator" class="recording-indicator">● 录音中...</span>
+  <button id="send" title="发送">➤</button>
+</div>
+
+<script>
+  /* ---------- 角色配置 ---------- */
+  const characters = {
+    yujiale: {
+      name: "xxx",
+      avatar: "x",
+      description: "18岁软件工程学生，技术爱好者"
+    },
+    hujianbo: {
+      name: "胡先生", 
+      avatar: "胡",
+      description: "成熟稳重的思考者"
+    },
+    zhangtongxue: {
+      name: "张同学",
+      avatar: "张", 
+      description: "多愁善感，心思细腻的同学"
+    }
+  };
+
+  /* ---------- 全局变量 ---------- */
+  let currentCharacter = 'yujiale';
+  let sidebarCollapsed = false;
+  const $ = q => document.querySelector(q);
+  const messages = $('#messages');
+  const API_BASE = 'https://xxx:8080';
+
+  let processingMessage = null;
+  const userRecordings = new Map();
+  let currentlyPlayingAudio = null;
+
+  /* ---------- 边栏收起/展开功能 ---------- */
+  function toggleSidebar() {
+    sidebarCollapsed = !sidebarCollapsed;
+    
+    const sidebar = $('#sidebar');
+    const mainContent = $('#main-content');
+    const bottom = $('#bottom');
+    const toggleButton = $('#sidebar-toggle');
+    
+    if (sidebarCollapsed) {
+      sidebar.classList.add('collapsed');
+      mainContent.classList.add('expanded');
+      bottom.classList.add('expanded');
+      toggleButton.innerHTML = '▶';
+      toggleButton.title = '展开边栏';
+    } else {
+      sidebar.classList.remove('collapsed');
+      mainContent.classList.remove('expanded');
+      bottom.classList.remove('expanded');
+      toggleButton.innerHTML = '◀';
+      toggleButton.title = '收起边栏';
+    }
+  }
+
+  // 初始化边栏切换按钮
+  $('#sidebar-toggle').addEventListener('click', toggleSidebar);
+
+  /* ---------- 角色切换 ---------- */
+  async function switchCharacter(characterId) {
+    if (characters[characterId]) {
+      try {
+        // 调用后端API切换角色
+        const res = await fetch(`${API_BASE}/character/switch`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({character: characterId})
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          currentCharacter = characterId;
+          const character = characters[characterId];
+          
+          // 更新UI
+          document.querySelectorAll('.character-item').forEach(item => {
+            item.classList.remove('active');
+          });
+          document.querySelector(`[data-character="${characterId}"]`).classList.add('active');
+          
+          $('#current-avatar').textContent = character.avatar;
+          $('#current-name').textContent = character.name;
+          $('#current-desc').textContent = character.description;
+          
+          // 清空当前对话
+          messages.innerHTML = '';
+          
+          // 发送欢迎消息
+          const welcomeMsg = `已切换到${character.name}，开始对话吧！`;
+          log(welcomeMsg, false);
+          
+          console.log(`切换到角色: ${character.name}`);
+        } else {
+          console.error('切换角色失败:', result.message);
+          log(`切换角色失败: ${result.message}`, false);
+        }
+      } catch (error) {
+        console.error('切换角色请求失败:', error);
+        log('切换角色请求失败，请检查网络连接', false);
+      }
+    }
+  }
+
+  // 初始化角色选择事件
+  document.querySelectorAll('.character-item').forEach(item => {
+    item.addEventListener('click', function() {
+      const characterId = this.getAttribute('data-character');
+      switchCharacter(characterId);
+    });
+  });
+
+  /* ---------- 工具函数 ---------- */
+  const log = (txt, me = false, isProcessing = false) => {
+    const div = document.createElement('div');
+    div.className = 'msg ' + (me ? 'me' : 'ai') + (isProcessing ? ' processing' : '');
+    div.innerHTML = `<div class="bubble">${txt}</div>`;
+    messages.appendChild(div);
+    div.scrollIntoView({behavior:'smooth'});
+    return div;
+  };
+
+  const updateMessage = (el, html, isProcessing = false) => {
+    el.classList.toggle('processing', isProcessing);
+    el.querySelector('.bubble').innerHTML = html;
+  };
+
+  const fmtTime = sec => {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const b64toBlob = (b64, type) => {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], {type});
+  };
+
+  /* ---------- 音频控制 ---------- */
+  const stopAllAudioPlayback = () => {
+    userRecordings.forEach((d, el) => {
+      if (d.isPlaying) { d.audio.pause(); d.audio.currentTime = 0; d.isPlaying = false; }
+    });
+    document.querySelectorAll('.msg.ai').forEach(el => {
+      if (el._audio && !el._audio.paused) {
+        el._audio.pause(); el._audio.currentTime = 0; el.classList.remove('playing');
+      }
+    });
+    currentlyPlayingAudio = null;
+  };
+
+  const toggleAudioPlayback = (msgEl) => {
+    const data = userRecordings.get(msgEl);
+    if (!data) return;
+    const {audio} = data;
+    if (audio.paused) {
+      stopAllAudioPlayback();
+      audio.play().then(() => {
+        data.isPlaying = true; currentlyPlayingAudio = audio;
+        msgEl.classList.add('playing');
+        audio.onended = () => { data.isPlaying = false; msgEl.classList.remove('playing'); currentlyPlayingAudio = null; };
+        audio.onerror = () => { data.isPlaying = false; msgEl.classList.remove('playing'); currentlyPlayingAudio = null; };
+      });
+    } else {
+      audio.pause(); audio.currentTime = 0; data.isPlaying = false; msgEl.classList.remove('playing'); currentlyPlayingAudio = null;
+    }
+  };
+
+  const setupAudioMessage = (msgEl, blob, duration) => {
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    userRecordings.set(msgEl, {audio, isPlaying: false});
+    const bubble = msgEl.querySelector('.bubble');
+    bubble.style.cursor = 'pointer';
+    bubble.onclick = () => toggleAudioPlayback(msgEl);
+  };
+
+  /* ---------- 录音 ---------- */
+  let mediaRecorder = null, audioChunks = [], isRecording = false, recordingStream = null, recordingStartTime = 0;
+
+  async function startRecording() {
+    try {
+      recordingStream = await navigator.mediaDevices.getUserMedia({
+        audio: {sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true}
+      });
+      audioChunks = [];
+      mediaRecorder = new MediaRecorder(recordingStream, {mimeType: 'audio/webm;codecs=opus'});
+      mediaRecorder.ondataavailable = e => { if (e.data.size) audioChunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const duration = (Date.now() - recordingStartTime) / 1000;
+        recordingStream.getTracks().forEach(t => t.stop());
+        if (!audioChunks.length) { if (processingMessage) { updateMessage(processingMessage, '录音数据为空', true); setTimeout(() => processingMessage && processingMessage.remove(), 3000); } return; }
+        const blob = new Blob(audioChunks, {type: 'audio/webm'});
+        await processRecording(blob, duration);
+      };
+      mediaRecorder.start();
+      isRecording = true; recordingStartTime = Date.now();
+      $('#mic').classList.add('rec'); $('#recordingIndicator').classList.add('show');
+      processingMessage = log('录音中...', true, true);
+      setTimeout(() => { if (isRecording) stopRecording(); }, 60000);
+    } catch (e) {
+      console.error(e);
+      let msg = '无法访问麦克风: ' + (e.name === 'NotAllowedError' ? '请允许麦克风权限' : e.name === 'NotFoundError' ? '未找到麦克风设备' : e.message);
+      log(msg, true);
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && isRecording) { mediaRecorder.stop(); isRecording = false; $('#mic').classList.remove('rec'); $('#recordingIndicator').classList.remove('show'); }
+  }
+
+  async function processRecording(blob, duration) {
+    try {
+      if (processingMessage) updateMessage(processingMessage, '转文字中...', true);
+      const formData = new FormData();
+      formData.append('file', blob, 'recording.webm');
+      const res = await fetch(`${API_BASE}/asr`, {method: 'POST', body: formData});
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const r = await res.json();
+      if (r.text && r.text.trim()) {
+        const text = r.text.trim();
+        if (processingMessage) {
+          const html = `<span class="text">${text}</span><span class="voice-time">${fmtTime(duration)}</span>`;
+          updateMessage(processingMessage, html, false);
+          setupAudioMessage(processingMessage, blob, duration);
+          sendChat(text);
+        }
+      } else if (r.error) { throw new Error(r.error); } else { throw new Error('未能识别到语音内容'); }
+    } catch (e) {
+      console.error(e);
+      let msg = '语音识别失败: ' + (e.message.includes('Failed to fetch') ? '无法连接到服务器，请检查后端服务是否运行' : e.message);
+      if (processingMessage) { updateMessage(processingMessage, msg, true); setTimeout(() => processingMessage && processingMessage.remove(), 5000); }
+    } finally { processingMessage = null; }
+  }
+
+  /* ---------- 交互 ---------- */
+  $('#mic').onclick = e => { e.preventDefault(); isRecording ? stopRecording() : startRecording(); return false; };
+  $('#send').onclick = e => {
+    e.preventDefault();
+    const t = $('#txt').value.trim();
+    if (!t) return;
+    log(t, true); sendChat(t); $('#txt').value = ''; return false;
+  };
+  $('#txt').onkeyup = e => { if (e.key === 'Enter') { e.preventDefault(); $('#send').click(); } };
+
+  /* ---------- 网络 ---------- */
+  async function sendChat(text) {
+    let thinking = log('思考中...', false, true);
+    try {
+      const res = await fetch(`${API_BASE}/chat`, {
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({text, character: currentCharacter})
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const r = await res.json();
+      if (thinking.parentNode) thinking.remove();
+      
+      // 保持流式输出效果
+      await speakAndShowStreaming(r.reply || '（空回复）', false);
+      
+    } catch (e) {
+      console.error(e);
+      if (thinking.parentNode) thinking.remove();
+      let msg = '网络错误: ' + (e.message.includes('Failed to fetch') ? '无法连接到服务器，请检查后端服务是否运行' : e.message);
+      log(msg, false);
+    }
+  }
+
+  // 保持流式输出的函数
+  async function speakAndShowStreaming(text, me) {
+    const textEl = log('', false);
+    const bubble = textEl.querySelector('.bubble');
+    
+    // 流式输出文字
+    let index = 0;
+    const typeText = () => {
+      if (index < text.length) {
+        bubble.innerHTML = text.substring(0, index + 1);
+        index++;
+        setTimeout(typeText, 50); // 控制打字速度
+      } else {
+        // 文字输出完成后开始TTS
+        startTTS(text, textEl, bubble);
+      }
+    };
+    
+    typeText();
+  }
+
+  // 单独的TTS函数
+  async function startTTS(text, textEl, bubble) {
+    // 添加加载状态
+    const loadingHtml = `<div class="tts-loading">
+      <div class="loading-spinner"></div>
+      <span>AI声音生成中...</span>
+    </div>`;
+    bubble.innerHTML = text + loadingHtml;
+    
+    try {
+      const res = await fetch(`${API_BASE}/tts`, {
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'}, 
+        body: JSON.stringify({text, character: currentCharacter})
+      });
+      
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const r = await res.json();
+      
+      if (r.error) throw new Error(r.error);
+      
+      // 移除加载状态，添加音频
+      const blob = b64toBlob(r.wav_base64, 'audio/wav');
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      textEl._audio = audio;
+      
+      audio.addEventListener('loadedmetadata', () => {
+        const t = fmtTime(audio.duration);
+        bubble.innerHTML = `${text}<span class="voice-time">${t}</span>`;
+      });
+      
+      audio.addEventListener('error', () => {
+        textEl.classList.remove('playing');
+        currentlyPlayingAudio = null;
+        textEl._audio = null;
+        bubble.innerHTML = `${text}<span class="voice-time" style="color:#dc3545"> (播放失败)</span>`;
+      });
+      
+      bubble.onclick = () => {
+        if (audio.paused) { 
+          stopAllAudioPlayback(); 
+          audio.currentTime = 0; 
+          audio.play(); 
+          textEl.classList.add('playing'); 
+          currentlyPlayingAudio = audio; 
+        } else { 
+          audio.pause(); 
+          audio.currentTime = 0; 
+          textEl.classList.remove('playing'); 
+          currentlyPlayingAudio = null; 
+        }
+      };
+      
+      // 自动播放
+      setTimeout(() => {
+        stopAllAudioPlayback();
+        audio.play().catch(() => {});
+        textEl.classList.add('playing');
+        currentlyPlayingAudio = audio;
+      }, 300);
+      
+      audio.onended = () => {
+        textEl.classList.remove('playing');
+        currentlyPlayingAudio = null;
+        textEl._audio = null;
+      };
+      
+    } catch (e) {
+      console.error(e);
+      // 如果出错，移除加载状态，显示错误信息
+      bubble.innerHTML = `${text}<span class="voice-time" style="color:#dc3545"> (语音生成失败)</span>`;
+    }
+  }
+
+  /* ---------- 调试函数 ---------- */
+  async function debugCharacterSystem() {
+    try {
+      console.log('=== 角色系统调试 ===');
+      
+      // 检查当前角色
+      const currentRes = await fetch(`${API_BASE}/character/current`);
+      const currentData = await currentRes.json();
+      console.log('当前角色:', currentData);
+      
+      // 检查角色列表
+      const listRes = await fetch(`${API_BASE}/character/list`);
+      const listData = await listRes.json();
+      console.log('角色列表:', listData);
+      
+      // 检查服务状态
+      const healthRes = await fetch(`${API_BASE}/health`);
+      const healthData = await healthRes.json();
+      console.log('服务状态:', healthData);
+      
+    } catch (error) {
+      console.error('调试失败:', error);
+    }
+  }
+
+  /* ---------- 初始化 ---------- */
+  window.addEventListener('load', () => {
+    if (!navigator.mediaDevices?.getUserMedia) { log('警告：您的浏览器不支持录音功能', true); $('#mic').disabled = true; $('#mic').style.background = '#6c757d'; }
+    if (!window.MediaRecorder) { log('警告：您的浏览器不支持MediaRecorder API', true); $('#mic').disabled = true; $('#mic').style.background = '#6c757d'; }
+    
+    // 运行调试
+    debugCharacterSystem();
+    
+    // 初始化默认角色
+    console.log('初始化默认角色: yujiale');
+  });
+  
+  document.addEventListener('submit', e => e.preventDefault());
+</script>
+</body>
+</html>
